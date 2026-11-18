@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Model checkpoints & weights (exceeds GitHub's 100MB file limit)
+*.pt
+*.pth
+*.onnx
+
+# Uploaded / temp files
+uploads/
+temp/
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db

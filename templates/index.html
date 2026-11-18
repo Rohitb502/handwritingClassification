@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Same hand? Handwriting comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --desk: #eef1f5;
+    --rule: #d3dbe6;
+    --ink: #14213d;
+    --muted: #5b6b86;
+    --pen: #2b4acb;
+    --match: #1d7a4b;
+    --differ: #b3361f;
+    --sheet: #ffffff;
+    --font: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--desk); }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink); font-family: var(--font);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px);
+    background-position: 0 12px;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 56px 24px 72px; }
+  h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 12px; }
+  .lede { color: var(--muted); max-width: 52ch; margin: 0 0 40px; font-size: 1.05rem; line-height: 1.5; background: var(--desk); display: inline-block; padding-right: 8px; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .slot { display: flex; flex-direction: column; gap: 10px; }
+  .slot-name { font-weight: 600; font-size: .95rem; }
+  .sheet {
+    position: relative; aspect-ratio: 4 / 3; background: var(--sheet);
+    border: 2px dashed #9fb0cc; border-radius: 6px; cursor: pointer;
+    display: grid; place-items: center; overflow: hidden; text-align: center;
+    transition: border-color .15s, background .15s;
+  }
+  .sheet:hover, .sheet.drag { border-color: var(--pen); background: #f7f9ff; }
+  .sheet:focus-within { outline: 3px solid var(--pen); outline-offset: 3px; }
+  .sheet.filled { border-style: solid; border-color: var(--rule); box-shadow: 0 1px 0 var(--rule), 0 8px 20px -12px rgba(20, 33, 61, .35); }
+  .sheet input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .sheet img { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+  .sheet.filled img { display: block; }
+  .sheet.filled .prompt { display: none; }
+  .prompt { color: var(--muted); padding: 16px; line-height: 1.4; }
+  .prompt b { color: var(--pen); font-weight: 600; }
+  .fname { font-size: .85rem; color: var(--muted); min-height: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .actions { margin: 32px 0 0; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  button.go {
+    font: inherit; font-weight: 600; background: var(--ink); color: #fff; border: 0;
+    padding: 14px 28px; border-radius: 6px; cursor: pointer; transition: background .15s, opacity .15s;
+  }
+  button.go:hover:not(:disabled) { background: var(--pen); }
+  button.go:focus-visible { outline: 3px solid var(--pen); outline-offset: 3px; }
+  button.go:disabled { opacity: .4; cursor: not-allowed; }
+  button.reset { font: inherit; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 8px; }
+  .err { color: var(--differ); font-weight: 600; margin: 16px 0 0; min-height: 1.4em; }
+
+  details { margin-top: 20px; color: var(--muted); font-size: .92rem; }
+  summary { cursor: pointer; width: fit-content; }
+  .thr-row { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+  .thr-row input[type=range] { width: 260px; accent-color: var(--pen); }
+  .thr-val { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); min-width: 3.5ch; }
+
+  .result {
+    margin-top: 40px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 28px; box-shadow: 0 10px 28px -16px rgba(20, 33, 61, .4); display: none;
+  }
+  .result.show { display: block; }
+  .verdict { font-size: clamp(1.6rem, 4vw, 2.3rem); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 4px; }
+  .verdict.same { color: var(--match); }
+  .verdict.diff { color: var(--differ); }
+  .note { color: var(--muted); margin: 0 0 28px; line-height: 1.45; }
+
+  .gauge { position: relative; height: 10px; background: #e4e9f1; border-radius: 5px; margin: 44px 8px 12px; }
+  .gauge .fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: var(--differ); width: 0; transition: width .6s cubic-bezier(.2, .8, .2, 1); }
+  .gauge.same .fill { background: var(--match); }
+  .gauge .nib {
+    position: absolute; top: 50%; width: 22px; height: 22px; border-radius: 50%; background: var(--ink);
+    border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); transform: translate(-50%, -50%);
+    left: 0; transition: left .6s cubic-bezier(.2, .8, .2, 1);
+  }
+  .gauge .tick { position: absolute; top: -10px; bottom: -10px; width: 2px; background: var(--ink); }
+  .gauge .tick span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: .8rem; white-space: nowrap; color: var(--muted); padding-bottom: 4px; }
+  .scale { display: flex; justify-content: space-between; margin: 0 8px; font-size: .82rem; color: var(--muted); }
+  .readout { margin-top: 22px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .readout b { color: var(--ink); font-size: 1.1rem; }
+
+  .busy .go::after { content: "…"; }
+
+  @media (max-width: 680px) {
+    .pair { grid-template-columns: 1fr; }
+    main { padding-top: 36px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gauge .fill, .gauge .nib { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Same hand?</h1>
+  <p class="lede">Add two scans or photos of handwritten pages. The model compares the writing style and tells you whether one person likely wrote both.</p>
+
+  <form id="form">
+    <div class="pair">
+      <div class="slot">
+        <span class="slot-name">Page A</span>
+        <label class="sheet" id="sheet1">
+          <input type="file" name="image1" accept="image/*" aria-label="Page A image">
+          <img alt="Preview of page A">
+          <span class="prompt"><b>Choose an image</b> or drop it here</span>
+        </label>
+        <span class="fname" id="name1"></span>
+      </div>
+      <div class="slot">
+        <span class="slot-name">Page B</span>
+        <label class="sheet" id="sheet2">
+          <input type="file" name="image2" accept="image/*" aria-label="Page B image">
+          <img alt="Preview of page B">
+          <span class="prompt"><b>Choose an image</b> or drop it here</span>
+        </label>
+        <span class="fname" id="name2"></span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="go" id="go" type="submit" disabled>Compare handwriting</button>
+      <button class="reset" id="reset" type="button">Clear both</button>
+    </div>
+    <p class="err" id="err" role="alert"></p>
+
+    <details>
+      <summary>Adjust the decision threshold</summary>
+      <div class="thr-row">
+        <input type="range" id="thr" min="-0.2" max="1" step="0.01" value="{{ threshold }}" aria-label="Decision threshold">
+        <span class="thr-val" id="thrVal">{{ threshold }}</span>
+        <button class="reset" id="thrReset" type="button">Use model default ({{ threshold }})</button>
+      </div>
+      <p>Pages scoring at or above the threshold are called a match. Raise it to avoid false matches; lower it to avoid missed ones.</p>
+    </details>
+  </form>
+
+  <section class="result" id="result" aria-live="polite">
+    <h2 class="verdict" id="verdict"></h2>
+    <p class="note" id="note"></p>
+    <div class="gauge" id="gauge">
+      <div class="fill" id="fill"></div>
+      <div class="tick" id="tick"><span id="tickLabel"></span></div>
+      <div class="nib" id="nib"></div>
+    </div>
+    <div class="scale"><span>Different writers</span><span>Same writer</span></div>
+    <p class="readout">Similarity score <b id="score"></b> · threshold <span id="thrOut"></span></p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const DEFAULT_THR = {{ threshold }};
+  const LO = -0.2, HI = 1.0;
+  const $ = id => document.getElementById(id);
+  const pct = v => Math.min(100, Math.max(0, (v - LO) / (HI - LO) * 100));
+
+  const slots = [1, 2].map(n => ({
+    sheet: $("sheet" + n), name: $("name" + n),
+    input: $("sheet" + n).querySelector("input"),
+    img: $("sheet" + n).querySelector("img"),
+  }));
+
+  function setFile(slot, file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const dt = new DataTransfer(); dt.items.add(file); slot.input.files = dt.files;
+    if (slot.img.src) URL.revokeObjectURL(slot.img.src);
+    slot.img.src = URL.createObjectURL(file);
+    slot.sheet.classList.add("filled");
+    slot.name.textContent = file.name;
+    refresh();
+  }
+  function clearSlot(slot) {
+    slot.input.value = "";
+    slot.img.removeAttribute("src");
+    slot.sheet.classList.remove("filled");
+    slot.name.textContent = "";
+  }
+  function refresh() {
+    $("go").disabled = !slots.every(s => s.input.files.length);
+    $("err").textContent = "";
+  }
+
+  slots.forEach(slot => {
+    slot.input.addEventListener("change", () => {
+      if (slot.input.files[0]) setFile(slot, slot.input.files[0]); else { clearSlot(slot); refresh(); }
+    });
+    ["dragenter", "dragover"].forEach(ev => slot.sheet.addEventListener(ev, e => { e.preventDefault(); slot.sheet.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach(ev => slot.sheet.addEventListener(ev, e => { e.preventDefault(); slot.sheet.classList.remove("drag"); }));
+    slot.sheet.addEventListener("drop", e => setFile(slot, e.dataTransfer.files[0]));
+  });
+
+  $("reset").addEventListener("click", () => { slots.forEach(clearSlot); $("result").classList.remove("show"); refresh(); });
+
+  const thr = $("thr");
+  thr.addEventListener("input", () => { $("thrVal").textContent = (+thr.value).toFixed(2); });
+  $("thrReset").addEventListener("click", () => { thr.value = DEFAULT_THR; $("thrVal").textContent = DEFAULT_THR; });
+
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const fd = new FormData($("form"));
+    fd.set("threshold", thr.value);
+    document.body.classList.add("busy"); $("go").disabled = true; $("err").textContent = "";
+    try {
+      const res = await fetch("/compare", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong.");
+      show(data);
+    } catch (err) {
+      $("err").textContent = err.message;
+    } finally {
+      document.body.classList.remove("busy"); refresh();
+    }
+  });
+
+  function show({ score, threshold, same_writer }) {
+    const v = $("verdict");
+    v.textContent = same_writer ? "Same writer" : "Different writers";
+    v.className = "verdict " + (same_writer ? "same" : "diff");
+    const close = Math.abs(score - threshold) < 0.05;
+    $("note").textContent = close
+      ? "The score is very close to the threshold, so treat this result as inconclusive."
+      : same_writer
+        ? "The handwriting style in both pages is consistent with a single writer."
+        : "The handwriting style differs enough that these pages likely come from different writers.";
+    $("gauge").className = "gauge" + (same_writer ? " same" : "");
+    $("tick").style.left = pct(threshold) + "%";
+    $("tickLabel").textContent = "threshold " + threshold.toFixed(2);
+    $("score").textContent = score.toFixed(3);
+    $("thrOut").textContent = threshold.toFixed(2);
+    $("result").classList.add("show");
+    $("fill").style.width = "0"; $("nib").style.left = "0";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      $("fill").style.width = pct(score) + "%";
+      $("nib").style.left = pct(score) + "%";
+    }));
+    $("result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+})();
+</script>
+</body>
+</html>
